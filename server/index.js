@@ -17,10 +17,12 @@ connectDB();
 // Importar rutas - Verifica que estas rutas sean correctas
 const authRoutes = require('./src/routes/authRoutes');
 const scanRoutes = require('./src/routes/scanRoutes');
+const metricsRoutes =require("./src/routes/metricsRoutes");
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/scan', scanRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 // Ruta de prueba/bienvenida
 app.get('/', (req, res) => {
@@ -33,7 +35,13 @@ app.get('/', (req, res) => {
             'POST /api/scan',
             'GET /api/scan/today',
             'GET /api/scan/status',
-            'GET /api/scan/history'
+            'GET /api/scan/history',
+
+            'GET /api/metrics/dashboard',
+            'GET /api/metrics/rounds',
+            'GET /api/metrics/scans',
+            'GET /api/metrics/shifts',
+            'GET /api/metrics/compliance'
         ]
     });
 });
@@ -45,6 +53,7 @@ app.use((req, res) => {
         message: 'Ruta no encontrada' 
     });
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
