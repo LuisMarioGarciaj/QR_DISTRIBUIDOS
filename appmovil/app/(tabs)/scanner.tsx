@@ -1,17 +1,18 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Platform,
-    Text,
-    TouchableOpacity,
-    Vibration,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "../../config/api";
@@ -23,6 +24,7 @@ interface ScanResponse {
     scan: {
       id: string;
       guardia: {
+        id: string;
         nombreCompleto: string;
       };
       checkpoint: {
@@ -31,7 +33,8 @@ interface ScanResponse {
         description: string;
       };
       scanTime: string;
-      location: {
+      fecha: string;
+      location?: {
         lat: number;
         lng: number;
       };
@@ -42,22 +45,33 @@ interface ScanResponse {
       completed: boolean;
       remaining: number;
     };
+    today: string;
   };
+}
+
+interface ProgressStatus {
+  scanned: number;
+  total: number;
+  completed: boolean;
+  remaining: number;
+  percentage: number;
 }
 
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
+  const [locationPermission, setLocationPermission] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [scanning, setScanning] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastScanData, setLastScanData] = useState<any>(null);
   const [userName, setUserName] = useState("");
+  const [progress, setProgress] = useState<ProgressStatus | null>(null);
   const qrLock = useRef(false);
 
-  // Obtener nombre del usuario al cargar
   useEffect(() => {
     loadUserData();
+    requestLocationPermission();
+    checkTodayProgress();
   }, []);
 
   const loadUserData = async () => {
@@ -70,6 +84,115 @@ export default function ScannerScreen() {
     } catch (error) {
       console.error("Error loading user data:", error);
     }
+  };
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === "granted");
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
+    }
+  };
+
+  const checkTodayProgress = async () => {
+    try {
+      const response = await api.get("/scan/status");
+      if (response.data.success) {
+        setProgress(response.data.status);
+      }
+    } catch (error) {
+      console.error("Error checking progress:", error);
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    if (!locationPermission) return null;
+
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      return {
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+      };
+    } catch (error) {
+      console.error("Error getting location:", error);
+      return null;
+    }
+  };
+
+  const getDeviceInfo = () => {
+    return `${Platform.OS} - ${Platform.Model || "Dispositivo móvil"}`;
+  };
+
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (!scanned && !qrLock.current && !loading) {
+      qrLock.current = true;
+      setScanned(true);
+      setLoading(true);
+      Vibration.vibrate(100);
+
+      try {
+        const location = await getCurrentLocation();
+
+        const response = await api.post<ScanResponse>("/scan", {
+          qrCodeValue: data,
+          location: location,
+          deviceInfo: getDeviceInfo(),
+        });
+
+        if (response.data.success && response.data.data) {
+          setLastScanData(response.data.data);
+          setProgress({
+            scanned: response.data.data.progress.scanned,
+            total: response.data.data.progress.total,
+            completed: response.data.data.progress.completed,
+            remaining: response.data.data.progress.remaining,
+            percentage: Math.round(
+              (response.data.data.progress.scanned /
+                response.data.data.progress.total) *
+                100,
+            ),
+          });
+          setShowSuccess(true);
+
+          // Si completó todos los puntos
+          if (response.data.data.progress.completed) {
+            Alert.alert(
+              "🎉 ¡Turno Completado!",
+              "Has escaneado todos los puntos de control. ¡Excelente trabajo!",
+              [{ text: "OK" }],
+            );
+          }
+
+          // Auto-cerrar modal después de 2 segundos
+          setTimeout(() => {
+            setShowSuccess(false);
+            resetScanner();
+          }, 2000);
+        }
+      } catch (error: any) {
+        console.error("Error en escaneo:", error);
+
+        let message = "Error al registrar el escaneo";
+        if (error.response?.data?.message) {
+          message = error.response.data.message;
+        }
+
+        Alert.alert("Error", message);
+        resetScanner();
+      }
+    }
+  };
+
+  const resetScanner = () => {
+    setTimeout(() => {
+      setScanned(false);
+      setLoading(false);
+      qrLock.current = false;
+    }, 1500);
   };
 
   if (!permission) {
@@ -106,102 +229,54 @@ export default function ScannerScreen() {
     );
   }
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (!scanning || qrLock.current || loading) return;
-
-    qrLock.current = true;
-    setScanned(true);
-    setLoading(true);
-    Vibration.vibrate(100); // Feedback táctil
-
-    try {
-      console.log("QR escaneado:", data);
-
-      // Obtener ubicación actual
-      let location = null;
-      try {
-        // Aquí puedes agregar la obtención de ubicación si lo deseas
-        // location = await getCurrentLocation();
-      } catch (error) {
-        console.log("Error getting location:", error);
-      }
-
-      // Enviar al backend
-      const response = await api.post<ScanResponse>("/scan", {
-        qrCodeValue: data,
-        location: location || { lat: 0, lng: 0 },
-        deviceInfo: `Expo - ${Platform.OS}`,
-      });
-
-      console.log("Respuesta:", response.data);
-
-      if (response.data.success) {
-        setLastScanData(response.data.data);
-        setShowSuccess(true);
-
-        // Si completó todos los puntos, mostrar mensaje especial
-        if (response.data.data?.progress.completed) {
-          Alert.alert(
-            "🎉 ¡Turno Completado!",
-            "Has escaneado todos los puntos de control. ¡Excelente trabajo!",
-            [{ text: "OK" }],
-          );
-        }
-
-        // Pequeña pausa para mostrar el éxito
-        setTimeout(() => {
-          setShowSuccess(false);
-          setScanned(false);
-          setScanning(true);
-          qrLock.current = false;
-          setLoading(false);
-        }, 2000);
-      } else {
-        Alert.alert("Error", response.data.message || "QR no válido");
-        resetScanner();
-      }
-    } catch (error: any) {
-      console.error("Error en escaneo:", error);
-
-      if (error.response?.status === 400) {
-        Alert.alert(
-          "Atención",
-          error.response.data?.message || "Ya escaneaste este punto hoy",
-        );
-      } else if (error.response?.status === 401) {
-        Alert.alert("Sesión expirada", "Por favor inicia sesión nuevamente");
-        router.replace("/login");
-      } else {
-        Alert.alert(
-          "Error",
-          "No se pudo registrar el escaneo. Intenta nuevamente.",
-        );
-      }
-
-      resetScanner();
-    }
-  };
-
-  const resetScanner = () => {
-    setTimeout(() => {
-      setScanned(false);
-      setScanning(true);
-      qrLock.current = false;
-      setLoading(false);
-    }, 1500);
-  };
-
   return (
     <SafeAreaView className="flex-1 bg-[#001C59]">
-      {/* Header */}
-      <View className="px-6 py-4 bg-[#001C59]">
-        <Text className="text-[#00E4FA] text-2xl font-bold">D.QR Scanner</Text>
-        {userName ? (
-          <Text className="text-white/70 text-sm mt-1">
-            Guardia:{" "}
-            <Text className="text-white font-semibold">{userName}</Text>
-          </Text>
-        ) : null}
+      {/* Header con información del usuario y progreso */}
+      <View className="px-6 pt-4 pb-6 bg-[#001C59] border-b border-[#00E4FA]/20">
+        <View className="flex-row justify-between items-center mb-4">
+          <View>
+            <Text className="text-[#00E4FA] text-2xl font-bold">
+              D.QR Scanner
+            </Text>
+            {userName && (
+              <Text className="text-white/90 text-base mt-1">
+                👤 {userName}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            onPress={async () => {
+              await AsyncStorage.multiRemove(["@auth_token", "@user_data"]);
+              router.replace("/login");
+            }}
+            className="bg-red-500/20 rounded-full p-3"
+          >
+            <MaterialIcons name="logout" size={24} color="#FF6B6B" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Barra de progreso */}
+        {progress && (
+          <View className="mt-2">
+            <View className="flex-row justify-between mb-2">
+              <Text className="text-white/80">Progreso del día</Text>
+              <Text className="text-[#00E4FA] font-bold">
+                {progress.scanned}/{progress.total}
+              </Text>
+            </View>
+            <View className="h-3 bg-white/20 rounded-full overflow-hidden">
+              <View
+                className="h-full bg-[#00E4FA] rounded-full"
+                style={{ width: `${progress.percentage}%` }}
+              />
+            </View>
+            <Text className="text-white/60 text-sm mt-2">
+              {progress.completed
+                ? "✅ ¡Completaste todos los puntos hoy!"
+                : `⏳ Te faltan ${progress.remaining} puntos`}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Scanner */}
@@ -215,7 +290,8 @@ export default function ScannerScreen() {
         >
           {/* Overlay del escáner */}
           <View className="flex-1 bg-black/50 justify-center items-center">
-            <View className="w-64 h-64 border-2 border-[#00E4FA] rounded-3xl">
+            <View className="w-64 h-64">
+              {/* Marco del escáner */}
               <View className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#00E4FA]" />
               <View className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#00E4FA]" />
               <View className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#00E4FA]" />
@@ -256,11 +332,15 @@ export default function ScannerScreen() {
 
               {lastScanData && (
                 <>
-                  <Text className="text-gray-600 text-center text-lg font-semibold">
+                  <Text className="text-gray-600 text-center text-lg font-semibold mb-2">
                     {lastScanData.scan?.checkpoint?.name}
                   </Text>
 
-                  <View className="w-full bg-gray-100 rounded-xl p-4 mt-4">
+                  <Text className="text-gray-500 text-sm mb-4">
+                    {new Date(lastScanData.scan?.scanTime).toLocaleTimeString()}
+                  </Text>
+
+                  <View className="w-full bg-gray-100 rounded-xl p-4">
                     <View className="flex-row justify-between mb-2">
                       <Text className="text-gray-500">Progreso:</Text>
                       <Text className="text-[#001C59] font-bold">
@@ -277,12 +357,6 @@ export default function ScannerScreen() {
                         }}
                       />
                     </View>
-
-                    <Text className="text-center text-gray-500 text-sm mt-2">
-                      {lastScanData.progress?.remaining > 0
-                        ? `Te faltan ${lastScanData.progress.remaining} puntos`
-                        : "¡Completaste todos los puntos!"}
-                    </Text>
                   </View>
                 </>
               )}
@@ -291,35 +365,21 @@ export default function ScannerScreen() {
         </View>
       </Modal>
 
-      {/* Botón para cerrar sesión */}
-      <TouchableOpacity
-        onPress={async () => {
-          await AsyncStorage.removeItem("@auth_token");
-          await AsyncStorage.removeItem("@user_data");
-          router.replace("/login");
-        }}
-        className="absolute top-12 right-4 bg-red-500/20 rounded-full p-2"
-      >
-        <MaterialIcons name="logout" size={24} color="#FF6B6B" />
-      </TouchableOpacity>
-
-      {/* Instrucciones */}
-      <View className="px-6 py-4 bg-[#001C59]">
-        <View className="flex-row justify-around">
-          <View className="items-center">
-            <Ionicons name="camera-outline" size={24} color="#00E4FA" />
-            <Text className="text-white/70 text-xs mt-1">Escanear QR</Text>
-          </View>
-          <View className="items-center">
-            <Ionicons name="location-outline" size={24} color="#00E4FA" />
-            <Text className="text-white/70 text-xs mt-1">
-              Registrar ubicación
-            </Text>
-          </View>
-          <View className="items-center">
-            <Ionicons name="time-outline" size={24} color="#00E4FA" />
-            <Text className="text-white/70 text-xs mt-1">Hora exacta</Text>
-          </View>
+      {/* Instrucciones flotantes */}
+      <View className="px-6 py-4 bg-[#001C59] flex-row justify-around">
+        <View className="items-center">
+          <Ionicons name="camera-outline" size={20} color="#00E4FA" />
+          <Text className="text-white/70 text-xs mt-1">Escanear QR</Text>
+        </View>
+        <View className="items-center">
+          <Ionicons name="location-outline" size={20} color="#00E4FA" />
+          <Text className="text-white/70 text-xs mt-1">
+            Registrar ubicación
+          </Text>
+        </View>
+        <View className="items-center">
+          <Ionicons name="time-outline" size={20} color="#00E4FA" />
+          <Text className="text-white/70 text-xs mt-1">Hora exacta</Text>
         </View>
       </View>
     </SafeAreaView>

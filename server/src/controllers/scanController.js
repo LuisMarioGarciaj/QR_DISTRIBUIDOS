@@ -9,7 +9,7 @@ const registerScan = async (req, res) => {
     try {
         const { qrCodeValue, location, deviceInfo } = req.body;
 
-        // Validar que el QR existe y está activo
+        // Validar que el QR existe
         const checkpoint = await Checkpoint.findOne({ 
             qrCodeValue, 
             status: 1 
@@ -18,16 +18,14 @@ const registerScan = async (req, res) => {
         if (!checkpoint) {
             return res.status(404).json({ 
                 success: false, 
-                message: 'Código QR no válido o punto de control inactivo' 
+                message: 'Código QR no válido' 
             });
         }
 
-        // Obtener fecha actual en formato YYYY-MM-DD para Bolivia (UTC-4)
+        // Obtener fecha actual
         const now = new Date();
         const boliviaTime = new Date(now.getTime() - (4 * 60 * 60 * 1000));
         const shiftDate = boliviaTime.toISOString().split('T')[0];
-        
-        const scanTime = new Date();
 
         // Verificar si ya escaneó este checkpoint hoy
         const existingScan = await Scan.findOne({
@@ -39,8 +37,7 @@ const registerScan = async (req, res) => {
         if (existingScan) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Ya escaneaste este punto hoy',
-                lastScan: existingScan.scanTime
+                message: 'Ya escaneaste este punto hoy' 
             });
         }
 
@@ -48,27 +45,20 @@ const registerScan = async (req, res) => {
         const scan = await Scan.create({
             userId: req.user.id,
             checkpointId: checkpoint._id,
-            scanTime: scanTime,
+            scanTime: now,
             date: shiftDate,
             shiftDate: shiftDate,
-            location,
-            deviceInfo
+            location: location || null,
+            deviceInfo: deviceInfo || 'Dispositivo móvil',
+            status: 1
         });
 
-        // Obtener el usuario para el nombre completo
         const user = await User.findById(req.user.id);
-
-        // Obtener todos los checkpoints escaneados hoy
         const todaysScans = await Scan.find({
             userId: req.user.id,
             shiftDate: shiftDate
-        }).populate('checkpointId', 'name description location');
-
-        // Obtener total de checkpoints activos en el sitio
-        const totalCheckpoints = await Checkpoint.countDocuments({ 
-            siteId: checkpoint.siteId,
-            status: 1 
         });
+        const totalCheckpoints = await Checkpoint.countDocuments({ status: 1 });
 
         res.json({
             success: true,
@@ -78,15 +68,12 @@ const registerScan = async (req, res) => {
                     id: scan._id,
                     guardia: {
                         id: user._id,
-                        nombre: user.name,
-                        apellidos: `${user.lastname} ${user.secondLastname || ''}`.trim(),
                         nombreCompleto: `${user.name} ${user.lastname} ${user.secondLastname || ''}`.trim()
                     },
                     checkpoint: {
                         id: checkpoint._id,
                         name: checkpoint.name,
-                        description: checkpoint.description,
-                        location: checkpoint.location
+                        description: checkpoint.description
                     },
                     scanTime: scan.scanTime,
                     location: scan.location,
@@ -103,15 +90,7 @@ const registerScan = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error en registerScan:', error);
-        
-        if (error.code === 11000) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Ya escaneaste este punto hoy' 
-            });
-        }
-
+        console.error('❌ Error:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor' 
@@ -132,59 +111,16 @@ const getTodayScans = async (req, res) => {
             userId: req.user.id,
             shiftDate: today
         })
-        .populate('checkpointId', 'name description location')
-        .populate('userId', 'name lastname secondLastname')
+        .populate('checkpointId', 'name description')
         .sort({ scanTime: 1 });
-
-        // Obtener total de checkpoints
-        let totalCheckpoints = 0;
-        let siteId = null;
-        
-        if (scans.length > 0 && scans[0].checkpointId) {
-            siteId = scans[0].checkpointId.siteId;
-            totalCheckpoints = await Checkpoint.countDocuments({ 
-                siteId: siteId,
-                status: 1 
-            });
-        }
-
-        // Formatear respuesta
-        const formattedScans = scans.map(scan => ({
-            id: scan._id,
-            scanTime: scan.scanTime,
-            hora: scan.scanTime.toLocaleTimeString('es-BO'),
-            checkpoint: {
-                id: scan.checkpointId._id,
-                name: scan.checkpointId.name,
-                description: scan.checkpointId.description
-            },
-            location: scan.location,
-            guardia: {
-                id: scan.userId._id,
-                nombreCompleto: `${scan.userId.name} ${scan.userId.lastname} ${scan.userId.secondLastname || ''}`.trim()
-            }
-        }));
 
         res.json({
             success: true,
-            date: today,
-            fechaFormateada: new Date(today).toLocaleDateString('es-BO', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            }),
-            scans: formattedScans,
-            progress: {
-                scanned: scans.length,
-                total: totalCheckpoints,
-                completed: scans.length === totalCheckpoints,
-                remaining: totalCheckpoints - scans.length
-            }
+            scans: scans
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('❌ Error:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor' 
@@ -214,8 +150,6 @@ const getScanStatus = async (req, res) => {
             date: today,
             guardia: {
                 id: user._id,
-                nombre: user.name,
-                apellidos: `${user.lastname} ${user.secondLastname || ''}`.trim(),
                 nombreCompleto: `${user.name} ${user.lastname} ${user.secondLastname || ''}`.trim()
             },
             status: {
@@ -224,14 +158,11 @@ const getScanStatus = async (req, res) => {
                 completed: scannedCount === totalCheckpoints,
                 remaining: totalCheckpoints - scannedCount,
                 percentage: Math.round((scannedCount / totalCheckpoints) * 100) || 0
-            },
-            message: scannedCount === totalCheckpoints 
-                ? '🎉 ¡Felicidades! Has completado todos los puntos de control hoy' 
-                : `📋 Te faltan ${totalCheckpoints - scannedCount} puntos por escanear`
+            }
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('❌ Error:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor' 
@@ -239,65 +170,26 @@ const getScanStatus = async (req, res) => {
     }
 };
 
-// @desc    Obtener historial de escaneos por fecha
+// @desc    Obtener historial de escaneos
 // @route   GET /api/scan/history
 // @access  Private
 const getScanHistory = async (req, res) => {
     try {
-        const { date, startDate, endDate, limit = 50 } = req.query;
+        const { limit = 50 } = req.query;
         
-        let query = { userId: req.user.id };
-        
-        if (date) {
-            query.shiftDate = date;
-        } else if (startDate && endDate) {
-            query.shiftDate = {
-                $gte: startDate,
-                $lte: endDate
-            };
-        }
-
-        const scans = await Scan.find(query)
+        const scans = await Scan.find({ userId: req.user.id })
             .populate('checkpointId', 'name description')
-            .populate('userId', 'name lastname secondLastname')
             .sort({ scanTime: -1 })
             .limit(parseInt(limit));
-
-        // Agrupar por fecha
-        const groupedByDate = scans.reduce((acc, scan) => {
-            const date = scan.shiftDate;
-            if (!acc[date]) {
-                acc[date] = {
-                    date,
-                    fechaFormateada: new Date(date).toLocaleDateString('es-BO'),
-                    count: 0,
-                    scans: []
-                };
-            }
-            
-            acc[date].count++;
-            acc[date].scans.push({
-                id: scan._id,
-                hora: scan.scanTime.toLocaleTimeString('es-BO'),
-                scanTime: scan.scanTime,
-                checkpoint: {
-                    name: scan.checkpointId.name,
-                    description: scan.checkpointId.description
-                },
-                location: scan.location
-            });
-            
-            return acc;
-        }, {});
 
         res.json({
             success: true,
             total: scans.length,
-            grouped: Object.values(groupedByDate)
+            scans: scans
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('❌ Error:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Error en el servidor' 
@@ -305,6 +197,7 @@ const getScanHistory = async (req, res) => {
     }
 };
 
+// Exportar todas las funciones
 module.exports = {
     registerScan,
     getTodayScans,
