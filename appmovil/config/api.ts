@@ -7,7 +7,7 @@ import axios, {
 
 // Configuración base de la API
 // CAMBIA ESTA IP POR LA IP DE TU COMPUTADORA
-const API_URL = "http://192.168.100.48:3000/api"; // Ejemplo: 'http://192.168.1.100:3000/api'
+const API_URL = "http://192.168.3.55:3000/api"; // Ejemplo: 'http://192.168.1.100:3000/api'
 
 // Interfaces para tipos
 interface LoginResponse {
@@ -71,4 +71,7 @@ api.interceptors.response.use(
 
 export default api;
 export type { LoginResponse, UserData };
+
+console.log("API URL:", API_URL);
+
 

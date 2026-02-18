@@ -13,9 +13,18 @@ import {
   TouchableOpacity,
   Vibration,
   View,
+  Dimensions,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from 'expo-linear-gradient';
 import api from "../../config/api";
+
+const { width, height } = Dimensions.get("window");
+
+// Función para escalado responsivo
+const scale = Math.min(width, height) / 375;
+const normalize = (size: number) => Math.round(size * scale);
 
 interface ScanResponse {
   success: boolean;
@@ -158,7 +167,6 @@ export default function ScannerScreen() {
           });
           setShowSuccess(true);
 
-          // Si completó todos los puntos
           if (response.data.data.progress.completed) {
             Alert.alert(
               "🎉 ¡Turno Completado!",
@@ -167,7 +175,6 @@ export default function ScannerScreen() {
             );
           }
 
-          // Auto-cerrar modal después de 2 segundos
           setTimeout(() => {
             setShowSuccess(false);
             resetScanner();
@@ -195,164 +202,481 @@ export default function ScannerScreen() {
     }, 1500);
   };
 
+  const handleLogout = async () => {
+    Alert.alert(
+      "Cerrar sesión",
+      "¿Estás seguro que deseas salir?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: async () => {
+            await AsyncStorage.multiRemove(["@auth_token", "@user_data"]);
+            router.replace("/login");
+          },
+        },
+      ]
+    );
+  };
+
+  const scannerFrameSize = Math.min(width * 0.7, 280);
+
   if (!permission) {
     return (
-      <View className="flex-1 justify-center items-center bg-[#001C59]">
+      <LinearGradient
+        colors={["#001C59", "#00257b"]}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+      >
         <ActivityIndicator size="large" color="#00E4FA" />
-        <Text className="text-white mt-4">
+        <Text style={{ color: 'white', marginTop: normalize(16), fontSize: normalize(14) }}>
           Solicitando permiso de cámara...
         </Text>
-      </View>
+      </LinearGradient>
     );
   }
 
   if (!permission.granted) {
     return (
-      <View className="flex-1 justify-center items-center bg-[#001C59] p-6">
-        <MaterialIcons name="cameraswitch" size={60} color="#00E4FA" />
-        <Text className="text-white text-xl font-bold mt-4 text-center">
+      <LinearGradient
+        colors={["#001C59", "#00257b"]}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: normalize(24) }}
+      >
+        <View style={{
+          width: normalize(80),
+          height: normalize(80),
+          borderRadius: normalize(20),
+          backgroundColor: 'rgba(0, 228, 250, 0.2)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: normalize(24)
+        }}>
+          <MaterialIcons name="cameraswitch" size={normalize(40)} color="#00E4FA" />
+        </View>
+        <Text style={{
+          color: 'white',
+          fontSize: normalize(20),
+          fontWeight: 'bold',
+          textAlign: 'center',
+          marginBottom: normalize(8)
+        }}>
           Permiso de cámara requerido
         </Text>
-        <Text className="text-white/70 text-center mt-2 mb-6">
-          Necesitamos acceso a la cámara para escanear los códigos QR de los
-          puntos de control.
+        <Text style={{
+          color: 'rgba(255,255,255,0.7)',
+          textAlign: 'center',
+          marginBottom: normalize(24),
+          fontSize: normalize(14)
+        }}>
+          Necesitamos acceso a la cámara para escanear los códigos QR de los puntos de control.
         </Text>
         <TouchableOpacity
           onPress={requestPermission}
-          className="bg-[#00E4FA] rounded-2xl py-4 px-8"
+          style={{
+            backgroundColor: '#00E4FA',
+            borderRadius: normalize(12),
+            paddingVertical: normalize(12),
+            paddingHorizontal: normalize(24),
+          }}
+          activeOpacity={0.8}
         >
-          <Text className="text-[#001C59] font-semibold text-lg">
+          <Text style={{ color: '#001C59', fontWeight: '600', fontSize: normalize(16) }}>
             Conceder permiso
           </Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#001C59]">
-      {/* Header con información del usuario y progreso */}
-      <View className="px-6 pt-4 pb-6 bg-[#001C59] border-b border-[#00E4FA]/20">
-        <View className="flex-row justify-between items-center mb-4">
-          <View>
-            <Text className="text-[#00E4FA] text-2xl font-bold">
-              D.QR Scanner
-            </Text>
-            {userName && (
-              <Text className="text-white/90 text-base mt-1">
-                👤 {userName}
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity
-            onPress={async () => {
-              await AsyncStorage.multiRemove(["@auth_token", "@user_data"]);
-              router.replace("/login");
-            }}
-            className="bg-red-500/20 rounded-full p-3"
-          >
-            <MaterialIcons name="logout" size={24} color="#FF6B6B" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Barra de progreso */}
-        {progress && (
-          <View className="mt-2">
-            <View className="flex-row justify-between mb-2">
-              <Text className="text-white/80">Progreso del día</Text>
-              <Text className="text-[#00E4FA] font-bold">
-                {progress.scanned}/{progress.total}
-              </Text>
-            </View>
-            <View className="h-3 bg-white/20 rounded-full overflow-hidden">
-              <View
-                className="h-full bg-[#00E4FA] rounded-full"
-                style={{ width: `${progress.percentage}%` }}
-              />
-            </View>
-            <Text className="text-white/60 text-sm mt-2">
-              {progress.completed
-                ? "✅ ¡Completaste todos los puntos hoy!"
-                : `⏳ Te faltan ${progress.remaining} puntos`}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Scanner */}
-      <View className="flex-1 m-4 rounded-3xl overflow-hidden border-2 border-[#00E4FA]/30">
-        <CameraView
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr"],
+    <View style={{ flex: 1, backgroundColor: '#001C59' }}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+        {/* Header mejorado con gradiente */}
+        <LinearGradient
+          colors={["#001C59", "rgba(0, 28, 89, 0.95)"]}
+          style={{
+            paddingTop: normalize(8),
+            paddingBottom: normalize(16),
+            paddingHorizontal: normalize(20),
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(0, 228, 250, 0.2)',
           }}
-          style={{ flex: 1 }}
         >
-          {/* Overlay del escáner */}
-          <View className="flex-1 bg-black/50 justify-center items-center">
-            <View className="w-64 h-64">
-              {/* Marco del escáner */}
-              <View className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#00E4FA]" />
-              <View className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#00E4FA]" />
-              <View className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#00E4FA]" />
-              <View className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#00E4FA]" />
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: normalize(12)
+          }}>
+            <View>
+              <Text style={{ color: '#00E4FA', fontSize: normalize(24), fontWeight: 'bold' }}>
+                D.QR Scanner
+              </Text>
+              {userName && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: normalize(4) }}>
+                  <View style={{
+                    width: normalize(24),
+                    height: normalize(24),
+                    borderRadius: normalize(12),
+                    backgroundColor: 'rgba(0, 228, 250, 0.2)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: normalize(6)
+                  }}>
+                    <Text style={{ color: '#00E4FA', fontSize: normalize(12), fontWeight: 'bold' }}>
+                      {userName.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={{ color: 'white', fontSize: normalize(14) }}>{userName}</Text>
+                </View>
+              )}
             </View>
-
-            <Text className="text-white text-center mt-8 text-lg font-semibold">
-              {loading ? "Procesando..." : "Apunta al código QR"}
-            </Text>
-            <Text className="text-white/70 text-center mt-2 px-8">
-              Escanea los códigos QR en los puntos de control para registrar tu
-              ronda
-            </Text>
+            
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={{
+                backgroundColor: 'rgba(255, 107, 107, 0.2)',
+                borderRadius: normalize(10),
+                padding: normalize(8),
+              }}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="logout" size={normalize(20)} color="#FF6B6B" />
+            </TouchableOpacity>
           </View>
 
-          {/* Loading overlay */}
-          {loading && (
-            <View className="absolute inset-0 bg-black/70 justify-center items-center">
-              <ActivityIndicator size="large" color="#00E4FA" />
-              <Text className="text-white mt-4">Registrando escaneo...</Text>
+          {/* Barra de progreso */}
+          {progress && (
+            <View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: normalize(6) }}>
+                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: normalize(12) }}>
+                  Progreso del día
+                </Text>
+                <Text style={{ color: '#00E4FA', fontWeight: 'bold', fontSize: normalize(14) }}>
+                  {progress.scanned}/{progress.total}
+                </Text>
+              </View>
+              <View style={{
+                height: normalize(6),
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                borderRadius: normalize(3),
+                overflow: 'hidden',
+              }}>
+                <View
+                  style={{
+                    height: '100%',
+                    backgroundColor: '#00E4FA',
+                    width: `${progress.percentage}%`,
+                  }}
+                />
+              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: normalize(10), marginTop: normalize(6) }}>
+                {progress.completed
+                  ? "✅ ¡Completaste todos los puntos hoy!"
+                  : `⏳ Te faltan ${progress.remaining} puntos`}
+              </Text>
             </View>
           )}
-        </CameraView>
-      </View>
+        </LinearGradient>
+
+        {/* Scanner - SIN ANIMACIONES DE MOVIMIENTO */}
+        <View style={{
+          flex: 1,
+          margin: normalize(16),
+          borderRadius: normalize(20),
+          overflow: 'hidden',
+          borderWidth: 2,
+          borderColor: 'rgba(0, 228, 250, 0.3)',
+        }}>
+          <CameraView
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr"],
+            }}
+            style={{ flex: 1 }}
+          >
+            {/* Overlay del escáner - ESTÁTICO */}
+            <View style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              {/* Marco del escáner fijo - SIN ANIMACIÓN */}
+              <View style={{
+                width: scannerFrameSize,
+                height: scannerFrameSize,
+              }}>
+                {/* Esquinas del marco - ESTÁTICAS */}
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: normalize(30),
+                  height: normalize(30),
+                  borderTopWidth: 3,
+                  borderLeftWidth: 3,
+                  borderColor: '#00E4FA',
+                  borderTopLeftRadius: normalize(12),
+                }} />
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  width: normalize(30),
+                  height: normalize(30),
+                  borderTopWidth: 3,
+                  borderRightWidth: 3,
+                  borderColor: '#00E4FA',
+                  borderTopRightRadius: normalize(12),
+                }} />
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  width: normalize(30),
+                  height: normalize(30),
+                  borderBottomWidth: 3,
+                  borderLeftWidth: 3,
+                  borderColor: '#00E4FA',
+                  borderBottomLeftRadius: normalize(12),
+                }} />
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  width: normalize(30),
+                  height: normalize(30),
+                  borderBottomWidth: 3,
+                  borderRightWidth: 3,
+                  borderColor: '#00E4FA',
+                  borderBottomRightRadius: normalize(12),
+                }} />
+              </View>
+
+              {/* Texto de instrucción estático */}
+              <View style={{
+                marginTop: normalize(24),
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                paddingHorizontal: normalize(20),
+                paddingVertical: normalize(8),
+                borderRadius: normalize(20),
+              }}>
+                <Text style={{ color: 'white', fontSize: normalize(12) }}>
+                  {loading ? "Procesando..." : "Apunta al código QR"}
+                </Text>
+              </View>
+
+              <Text style={{
+                color: 'rgba(255,255,255,0.7)',
+                textAlign: 'center',
+                marginTop: normalize(8),
+                paddingHorizontal: normalize(20),
+                fontSize: normalize(10)
+              }}>
+                Escanea los códigos QR en los puntos de control
+              </Text>
+            </View>
+
+            {/* Loading overlay */}
+            {loading && (
+              <View style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  backgroundColor: '#001C59',
+                  padding: normalize(20),
+                  borderRadius: normalize(16),
+                  alignItems: 'center',
+                }}>
+                  <ActivityIndicator size="large" color="#00E4FA" />
+                  <Text style={{ color: 'white', marginTop: normalize(12), fontSize: normalize(14) }}>
+                    Registrando escaneo...
+                  </Text>
+                </View>
+              </View>
+            )}
+          </CameraView>
+        </View>
+
+        {/* Footer con características */}
+        <LinearGradient
+          colors={["rgba(0, 28, 89, 0.95)", "#001C59"]}
+          style={{
+            paddingHorizontal: normalize(20),
+            paddingVertical: normalize(12),
+            flexDirection: 'row',
+            justifyContent: 'space-around',
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(0, 228, 250, 0.2)',
+          }}
+        >
+          <View style={{ alignItems: 'center' }}>
+            <View style={{
+              width: normalize(32),
+              height: normalize(32),
+              borderRadius: normalize(16),
+              backgroundColor: 'rgba(0, 228, 250, 0.2)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: normalize(4),
+            }}>
+              <Ionicons name="camera-outline" size={normalize(16)} color="#00E4FA" />
+            </View>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: normalize(9) }}>
+              Escanear QR
+            </Text>
+          </View>
+          <View style={{ alignItems: 'center' }}>
+            <View style={{
+              width: normalize(32),
+              height: normalize(32),
+              borderRadius: normalize(16),
+              backgroundColor: 'rgba(0, 228, 250, 0.2)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: normalize(4),
+            }}>
+              <Ionicons name="location-outline" size={normalize(16)} color="#00E4FA" />
+            </View>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: normalize(9) }}>
+              Geo-localización
+            </Text>
+          </View>
+          <View style={{ alignItems: 'center' }}>
+            <View style={{
+              width: normalize(32),
+              height: normalize(32),
+              borderRadius: normalize(16),
+              backgroundColor: 'rgba(0, 228, 250, 0.2)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: normalize(4),
+            }}>
+              <Ionicons name="time-outline" size={normalize(16)} color="#00E4FA" />
+            </View>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: normalize(9) }}>
+              Hora exacta
+            </Text>
+          </View>
+        </LinearGradient>
+      </SafeAreaView>
 
       {/* Modal de éxito */}
       <Modal visible={showSuccess} transparent animationType="fade">
-        <View className="flex-1 justify-center items-center bg-black/70">
-          <View className="bg-white rounded-3xl p-8 w-4/5 max-w-sm">
-            <View className="items-center">
-              <View className="w-20 h-20 bg-green-100 rounded-full justify-center items-center mb-4">
-                <Ionicons name="checkmark-circle" size={50} color="#00E4FA" />
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: normalize(20),
+            padding: normalize(24),
+            width: width * 0.85,
+            maxWidth: 350,
+          }}>
+            <View style={{ alignItems: 'center' }}>
+              <View style={{
+                width: normalize(70),
+                height: normalize(70),
+                borderRadius: normalize(35),
+                backgroundColor: '#4CAF50',
+                opacity: 0.1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: normalize(16),
+              }}>
+                <View style={{
+                  width: normalize(56),
+                  height: normalize(56),
+                  borderRadius: normalize(28),
+                  backgroundColor: '#00E4FA',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Ionicons name="checkmark" size={normalize(28)} color="#001C59" />
+                </View>
               </View>
 
-              <Text className="text-2xl font-bold text-[#001C59] mb-2">
+              <Text style={{
+                fontSize: normalize(20),
+                fontWeight: 'bold',
+                color: '#001C59',
+                marginBottom: normalize(12),
+              }}>
                 ¡Escaneado!
               </Text>
 
               {lastScanData && (
                 <>
-                  <Text className="text-gray-600 text-center text-lg font-semibold mb-2">
-                    {lastScanData.scan?.checkpoint?.name}
-                  </Text>
+                  <View style={{
+                    backgroundColor: '#F5F5F5',
+                    borderRadius: normalize(12),
+                    padding: normalize(16),
+                    width: '100%',
+                    marginBottom: normalize(12),
+                  }}>
+                    <Text style={{
+                      color: '#00E4FA',
+                      fontSize: normalize(16),
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      marginBottom: normalize(4),
+                    }}>
+                      {lastScanData.scan?.checkpoint?.name}
+                    </Text>
+                    
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="time-outline" size={normalize(12)} color="#666" />
+                      <Text style={{
+                        color: '#666',
+                        fontSize: normalize(11),
+                        marginLeft: normalize(4),
+                      }}>
+                        {new Date(lastScanData.scan?.scanTime).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </View>
 
-                  <Text className="text-gray-500 text-sm mb-4">
-                    {new Date(lastScanData.scan?.scanTime).toLocaleTimeString()}
-                  </Text>
-
-                  <View className="w-full bg-gray-100 rounded-xl p-4">
-                    <View className="flex-row justify-between mb-2">
-                      <Text className="text-gray-500">Progreso:</Text>
-                      <Text className="text-[#001C59] font-bold">
-                        {lastScanData.progress?.scanned} /{" "}
-                        {lastScanData.progress?.total}
+                  <View style={{
+                    backgroundColor: '#F5F5F5',
+                    borderRadius: normalize(12),
+                    padding: normalize(12),
+                    width: '100%',
+                  }}>
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: normalize(6),
+                    }}>
+                      <Text style={{ color: '#666', fontSize: normalize(11) }}>Progreso:</Text>
+                      <Text style={{ color: '#001C59', fontWeight: 'bold', fontSize: normalize(14) }}>
+                        {lastScanData.progress?.scanned} / {lastScanData.progress?.total}
                       </Text>
                     </View>
 
-                    <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <View style={{
+                      height: normalize(6),
+                      backgroundColor: '#E0E0E0',
+                      borderRadius: normalize(3),
+                      overflow: 'hidden',
+                    }}>
                       <View
-                        className="h-full bg-[#00E4FA] rounded-full"
                         style={{
+                          height: '100%',
+                          backgroundColor: '#00E4FA',
                           width: `${(lastScanData.progress?.scanned / lastScanData.progress?.total) * 100}%`,
                         }}
                       />
@@ -360,28 +684,17 @@ export default function ScannerScreen() {
                   </View>
                 </>
               )}
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: normalize(16) }}>
+                <ActivityIndicator size="small" color="#00E4FA" />
+                <Text style={{ color: '#999', fontSize: normalize(10), marginLeft: normalize(8) }}>
+                  Cerrando...
+                </Text>
+              </View>
             </View>
           </View>
         </View>
       </Modal>
-
-      {/* Instrucciones flotantes */}
-      <View className="px-6 py-4 bg-[#001C59] flex-row justify-around">
-        <View className="items-center">
-          <Ionicons name="camera-outline" size={20} color="#00E4FA" />
-          <Text className="text-white/70 text-xs mt-1">Escanear QR</Text>
-        </View>
-        <View className="items-center">
-          <Ionicons name="location-outline" size={20} color="#00E4FA" />
-          <Text className="text-white/70 text-xs mt-1">
-            Registrar ubicación
-          </Text>
-        </View>
-        <View className="items-center">
-          <Ionicons name="time-outline" size={20} color="#00E4FA" />
-          <Text className="text-white/70 text-xs mt-1">Hora exacta</Text>
-        </View>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }
