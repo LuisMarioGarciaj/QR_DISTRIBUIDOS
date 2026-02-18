@@ -1,6 +1,5 @@
-const PatrolRound = require("../models/PatrolRound");
 const Scan = require("../models/Scan");
-const Shift = require("../models/Shift");
+const User = require("../models/User");
 
 
 // helper filtro fechas
@@ -22,35 +21,6 @@ const buildDateFilter = (field, startDate, endDate) => {
     }
 
     return filter;
-};
-
-
-
-// GET /api/metrics/rounds
-exports.getRounds = async (req, res) => {
-
-    try {
-
-        const { startDate, endDate } = req.query;
-
-        const filter =
-            buildDateFilter("createdAt", startDate, endDate);
-
-        const totalRounds =
-            await PatrolRound.countDocuments(filter);
-
-        res.json({
-            totalRounds
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            error: error.message
-        });
-
-    }
-
 };
 
 
@@ -84,159 +54,41 @@ exports.getScans = async (req, res) => {
 
 
 
-// GET /api/metrics/shifts
-exports.getShifts = async (req, res) => {
-
-    try {
-
-        const { startDate, endDate } = req.query;
-
-        const filter =
-            buildDateFilter("startTime", startDate, endDate);
-
-        const totalShifts =
-            await Shift.countDocuments(filter);
-
-        res.json({
-            totalShifts
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            error: error.message
-        });
-
-    }
-
-};
-
-
-
-// GET /api/metrics/compliance
-exports.getCompliance = async (req, res) => {
-
-    try {
-
-        const { startDate, endDate } = req.query;
-
-        const filter =
-            buildDateFilter("createdAt", startDate, endDate);
-
-        const rounds =
-            await PatrolRound.find(filter);
-
-        let totalCheckpoints = 0;
-        let completedCheckpoints = 0;
-
-        rounds.forEach(round => {
-
-            totalCheckpoints +=
-                round.totalCheckpoints || 0;
-
-            completedCheckpoints +=
-                round.completedCheckpoints || 0;
-
-        });
-
-        let compliancePercentage = 0;
-
-        if (totalCheckpoints > 0) {
-
-            compliancePercentage =
-                (completedCheckpoints / totalCheckpoints) * 100;
-
-        }
-
-        res.json({
-
-            compliancePercentage:
-                Number(compliancePercentage.toFixed(2))
-
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            error: error.message
-        });
-
-    }
-
-};
-
-
-
 // GET /api/metrics/dashboard
 exports.getDashboardMetrics = async (req, res) => {
 
     try {
 
         const { startDate, endDate } = req.query;
-
-        const roundFilter =
-            buildDateFilter("createdAt", startDate, endDate);
+        console.log("Metrics Query Params:", { startDate, endDate });
 
         const scanFilter =
             buildDateFilter("createdAt", startDate, endDate);
 
-        const shiftFilter =
-            buildDateFilter("startTime", startDate, endDate);
+        const userFilter =
+            buildDateFilter("createdAt", startDate, endDate);
+
+        console.log("User Filter:", JSON.stringify(userFilter));
 
 
         const [
 
-            totalRounds,
             totalScans,
-            totalShifts,
-            rounds
+            totalUsers
 
         ] = await Promise.all([
 
-            PatrolRound.countDocuments(roundFilter),
-
             Scan.countDocuments(scanFilter),
 
-            Shift.countDocuments(shiftFilter),
-
-            PatrolRound.find(roundFilter)
+            User.countDocuments(userFilter)
 
         ]);
 
-
-        let totalCheckpoints = 0;
-        let completedCheckpoints = 0;
-
-        rounds.forEach(round => {
-
-            totalCheckpoints +=
-                round.totalCheckpoints || 0;
-
-            completedCheckpoints +=
-                round.completedCheckpoints || 0;
-
-        });
-
-
-        let compliancePercentage = 0;
-
-        if (totalCheckpoints > 0) {
-
-            compliancePercentage =
-                (completedCheckpoints / totalCheckpoints) * 100;
-
-        }
-
+        console.log("Total Users Found:", totalUsers);
 
         res.json({
-
-            totalRounds,
             totalScans,
-            totalShifts,
-
-            compliancePercentage:
-                Number(compliancePercentage.toFixed(2))
-
+            totalUsers
         });
 
     } catch (error) {
