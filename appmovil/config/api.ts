@@ -72,6 +72,5 @@ api.interceptors.response.use(
 export default api;
 export type { LoginResponse, UserData };
 
-console.log("API URL:", API_URL);
 
 

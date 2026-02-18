@@ -17,7 +17,7 @@ connectDB();
 // Importar rutas - Verifica que estas rutas sean correctas
 const authRoutes = require('./src/routes/authRoutes');
 const scanRoutes = require('./src/routes/scanRoutes');
-const metricsRoutes =require("./src/routes/metricsRoutes");
+const metricsRoutes = require("./src/routes/metricsRoutes");
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
@@ -26,7 +26,7 @@ app.use('/api/metrics', metricsRoutes);
 
 // Ruta de prueba/bienvenida
 app.get('/', (req, res) => {
-    res.json({ 
+    res.json({
         message: 'API de Control de Patrullajes',
         version: '1.0.0',
         endpoints: [
@@ -38,19 +38,16 @@ app.get('/', (req, res) => {
             'GET /api/scan/history',
 
             'GET /api/metrics/dashboard',
-            'GET /api/metrics/rounds',
-            'GET /api/metrics/scans',
-            'GET /api/metrics/shifts',
-            'GET /api/metrics/compliance'
+            'GET /api/metrics/scans'
         ]
     });
 });
 
 // Manejo de errores 404
 app.use((req, res) => {
-    res.status(404).json({ 
-        success: false, 
-        message: 'Ruta no encontrada' 
+    res.status(404).json({
+        success: false,
+        message: 'Ruta no encontrada'
     });
 });
 
