@@ -22,10 +22,15 @@ const registerScan = async (req, res) => {
             });
         }
 
-        // Obtener fecha actual
         const now = new Date();
-        const boliviaTime = new Date(now.getTime() - (4 * 60 * 60 * 1000));
-        const shiftDate = boliviaTime.toISOString().split('T')[0];
+
+const shiftDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/La_Paz',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+}).format(now);
+
 
         // Verificar si ya escaneó este checkpoint hoy
         const existingScan = await Scan.findOne({
@@ -104,8 +109,13 @@ const registerScan = async (req, res) => {
 const getTodayScans = async (req, res) => {
     try {
         const now = new Date();
-        const boliviaTime = new Date(now.getTime() - (4 * 60 * 60 * 1000));
-        const today = boliviaTime.toISOString().split('T')[0];
+        const today = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/La_Paz',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+}).format(new Date());
+
 
         const scans = await Scan.find({
             userId: req.user.id,
@@ -134,8 +144,13 @@ const getTodayScans = async (req, res) => {
 const getScanStatus = async (req, res) => {
     try {
         const now = new Date();
-        const boliviaTime = new Date(now.getTime() - (4 * 60 * 60 * 1000));
-        const today = boliviaTime.toISOString().split('T')[0];
+        const today = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/La_Paz',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+}).format(new Date());
+
 
         const scannedCount = await Scan.countDocuments({
             userId: req.user.id,

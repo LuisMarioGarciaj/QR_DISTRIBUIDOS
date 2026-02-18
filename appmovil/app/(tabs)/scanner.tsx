@@ -644,7 +644,13 @@ export default function ScannerScreen() {
                         fontSize: normalize(11),
                         marginLeft: normalize(4),
                       }}>
-                        {new Date(lastScanData.scan?.scanTime).toLocaleTimeString()}
+                        {new Date(lastScanData.scan?.scanTime).toLocaleTimeString("es-BO", {
+  timeZone: "America/La_Paz",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit"
+})}
+
                       </Text>
                     </View>
                   </View>
